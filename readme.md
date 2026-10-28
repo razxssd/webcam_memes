@@ -11,7 +11,8 @@ L’elaborazione utilizza MediaPipe per rilevare volto e mani, OpenCV per acquis
 ## Funzionalità
 
 - rilevamento in tempo reale di un volto e fino a due mani;
-- riconoscimento di sette pose tramite i landmark MediaPipe;
+- riconoscimento di tre pose tramite i landmark MediaPipe;
+- tecnica della sostituzione (Kawarimi no Jutsu): col sigillo della Tigre vieni sostituito da un tronco;
 - sovrapposizione del meme associato direttamente sul volto;
 - riquadri animati intorno alle mani rilevate;
 - stabilizzazione temporale per limitare attivazioni accidentali e sfarfallii;
@@ -25,14 +26,28 @@ L’elaborazione utilizza MediaPipe per rilevare volto e mani, OpenCV per acquis
 | Posa | Gesto richiesto | Immagine mostrata |
 |---|---|---|
 | Due mani sul volto | Due mani aperte, verticali e ravvicinate davanti al volto | `memes/image.png` |
-| Ascolto | Una mano aperta accanto a un orecchio | `memes/hearing.png` |
 | Mani dietro la testa | Due mani separate ai lati della testa | `memes/memeomg.png` |
-| Preghiera | Due mani giunte o intrecciate | `memes/sad.png` |
-| Indicazione su di sé | Una mano sotto il volto con l’indice rivolto verso il petto | `memes/me.png` |
 | Timeout | Due mani aperte e perpendicolari, disposte a forma di T | `memes/stop.png` |
-| Calma | Una mano aperta davanti al petto, con quattro dita distese e abbastanza unite | `memes/calma.jpg` |
 
-Le pose hanno priorità diverse per ridurre le sovrapposizioni tra gesti simili. In genere una posa deve essere riconosciuta per almeno cinque fotogrammi consecutivi prima di attivarsi; la posa “Preghiera” richiede due fotogrammi. Il meme viene rimosso dopo otto fotogrammi senza una posa valida.
+Le pose hanno priorità diverse per ridurre le sovrapposizioni tra gesti simili. Una posa deve essere riconosciuta per almeno cinque fotogrammi consecutivi prima di attivarsi. Il meme viene rimosso dopo otto fotogrammi senza una posa valida.
+
+## Tecnica della sostituzione
+
+Fai il **sigillo della Tigre**: mani unite davanti al petto, indice e medio di entrambe le mani dritti verso l'alto, anulare e mignolo piegati. Dopo una nuvola di fumo (`memes/nuvole.jpeg`) al tuo posto compare un tronco (`memes/tronco.jpeg`). Rifai il sigillo per ricomparire.
+
+La persona viene separata dallo sfondo con il modello `selfie_segmenter.tflite`. Lo sfondo dietro di te viene imparato mentre ti muovi: subito dopo l'avvio spostati un po' a destra e a sinistra, così la scomparsa risulta più pulita. Le immagini senza trasparenza vengono scontornate automaticamente rimuovendo lo sfondo chiaro.
+
+## Sfondo virtuale
+
+Gli sfondi virtuali di Meet e Zoom riconoscono solo le persone: coprirebbero anche il tronco e il fumo. Per questo lo sfondo virtuale va fatto dallo script e quello dell'app di videochiamata va **disattivato**:
+
+```bash
+.venv/bin/python run3.py --sfondo blur                 # sfondo sfocato
+.venv/bin/python run3.py --sfondo memes/sfondo.jpg     # immagine a scelta
+.venv/bin/python run3.py --sfondo none                 # sfondo reale
+```
+
+Senza opzione viene usato `VIRTUAL_BACKGROUND`, definito all'inizio di `run3.py` (predefinito: `memes/background.png`).
 
 ## Requisiti
 
@@ -55,6 +70,23 @@ Se `python` non viene riconosciuto, installa Python e abilita l’opzione per ag
 
 Installa inoltre OBS Studio. La webcam virtuale deve essere disponibile nel sistema, ma non deve essere già occupata da OBS o da un’altra istanza del programma quando avvii `run3.py`.
 
+## Installazione su macOS
+
+MediaPipe non supporta ancora le versioni più recenti di Python: usa Python 3.12 in un ambiente virtuale (qui con [uv](https://docs.astral.sh/uv/)):
+
+```bash
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/python run3.py
+```
+
+Poi:
+
+1. al primo avvio concedi l'accesso alla fotocamera all'app del terminale (**Impostazioni di Sistema > Privacy e sicurezza > Fotocamera**) e riavvia il terminale;
+2. per la webcam virtuale installa OBS Studio 30 o successivo (`brew install --cask obs`), aprilo e premi una volta **Avvia videocamera virtuale** per installare l'estensione di sistema, che va approvata in **Impostazioni di Sistema > Generali > Elementi login ed estensioni**. Quindi ferma la videocamera virtuale e chiudi OBS prima di avviare `run3.py`.
+
+Se OBS Virtual Camera non è disponibile, il programma mostra comunque l'anteprima locale.
+
 ## Struttura dei file
 
 La cartella deve contenere almeno questi file:
@@ -64,14 +96,14 @@ webcam_memes/
 ├── run3.py
 ├── face_landmarker.task
 ├── hand_landmarker.task
+├── selfie_segmenter.tflite
 └── memes/
     ├── image.png
-    ├── hearing.png
     ├── memeomg.png
-    ├── sad.png
-    ├── me.png
     ├── stop.png
-    └── calma.jpg
+    ├── tronco.jpeg
+    ├── nuvole.jpeg
+    └── background.png
 ```
 
 I percorsi vengono calcolati rispetto alla posizione di `run3.py`, quindi il programma può essere avviato anche da una directory di lavoro diversa.
@@ -106,12 +138,8 @@ Puoi sostituire un meme mantenendo invariati nome, estensione e posizione del fi
 
 ```python
 MEME_PATH = BASE_DIR / "memes" / "image.png"
-HEARING_MEME_PATH = BASE_DIR / "memes" / "hearing.png"
 MEMEOMG_PATH = BASE_DIR / "memes" / "memeomg.png"
-SAD_MEME_PATH = BASE_DIR / "memes" / "sad.png"
-ME_MEME_PATH = BASE_DIR / "memes" / "me.png"
 STOP_MEME_PATH = BASE_DIR / "memes" / "stop.png"
-CALMA_MEME_PATH = BASE_DIR / "memes" / "calma.jpg"
 ```
 
 Sono consigliate immagini nitide, con proporzioni adatte al volto. Il programma le ridimensiona mantenendo le proporzioni e le ritaglia quando necessario per non uscire dal fotogramma.
